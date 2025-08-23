@@ -1,10 +1,13 @@
 import express from 'express'
-import UserRouter from './userRouter.js'
-import RegistroRouter from './registroRouter.js' // <-- 1. IMPORTA EL NUEVO ROUTER
+// import userRouter from './users.js'; // Puedes descomentar esto cuando crees las rutas de usuario
 
-let router = express.Router();
+const router = express.Router();
 
-router.use('/users', UserRouter);
-router.use('/registros', RegistroRouter); // <-- 2. USA EL NUEVO ROUTER
+// Cuando una petición llegue a /api/rutinas, será manejada por rutinaRouter
 
-export default router
+
+// Cuando una petición llegue a /api/users, será manejada por userRouter
+// router.use('/users', userRouter);
+
+
+export default router;

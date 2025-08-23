@@ -1,12 +1,12 @@
-#!/usr/bin/env node
 
 /**
- * Module dependencies.
+ * Module dependencies.#!/usr/bin/env node
+
  */
 
 import app from "../app.js"
 import debug from "debug"
-const logger = debug("back-app-pedidosbar:server")
+const logger = debug("back-app-agropecuearios:server")
 import http from 'http'
 
 
@@ -17,7 +17,7 @@ import http from 'http'
  * Get port from environment and store in Express.
  */
 
-let port = normalizePort(process.env.PORT || '4000');
+let port = normalizePort(process.env.PORT || '8000');
 app.set('port', port);
 
 /**
