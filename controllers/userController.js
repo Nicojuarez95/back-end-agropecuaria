@@ -60,6 +60,17 @@ const userController = {
         } catch (error) {
             next(error);
         }
+    },
+    // --- NUEVA FUNCIÓN PARA OBTENER TODOS LOS USUARIOS ---
+    getAllUsers: async (req, res, next) => {
+        try {
+            // Buscamos todos los usuarios y poblamos el campo proveedorId
+            // para mostrar el nombre del proveedor asociado, si existe.
+            const users = await User.find({}).populate('proveedorId', 'nombre');
+            res.status(200).json({ success: true, users });
+        } catch (error) {
+            next(error);
+        }
     }
 };
 

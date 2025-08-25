@@ -2,17 +2,14 @@
 import OrdenDeTrabajo from '../models/ordenDeTrabajo.js';
 import mongoose from 'mongoose';
 import cloudinary from '../config/cloudinary.js';
-import PDFDocument from 'pdfkit'; // <-- IMPORTAMOS PDFKIT
+import PDFDocument from 'pdfkit';
+import axios from 'axios'; // <-- ESTA ES LA LÍNEA QUE FALTABA
 
 const ordenDeTrabajoController = {
-    // --- createOT, getAllOTs, y las demás funciones se mantienen igual ---
     createOT: async (req, res, next) => {
         try {
             const adminId = req.user.id;
-            const { campaña, proveedorId, hectareas } = req.body;
-            if (!campaña || !proveedorId || !hectareas) {
-                return res.status(400).json({ success: false, message: "Faltan campos obligatorios." });
-            }
+            
             let imageUrl = '';
             if (req.file) {
                 const result = await new Promise((resolve, reject) => {
@@ -21,13 +18,25 @@ const ordenDeTrabajoController = {
                 });
                 imageUrl = result.secure_url;
             }
-            const nuevaOT = await OrdenDeTrabajo.create({ ...req.body, imagen: imageUrl, creadoPor: adminId });
+
+            const nuevaOT = await OrdenDeTrabajo.create({
+                ...req.body,
+                imagen: imageUrl,
+                creadoPor: adminId
+            });
+
             res.status(201).json({ success: true, message: "Orden de Trabajo creada exitosamente.", ot: nuevaOT });
         } catch (error) {
-            if (error.name === 'ValidationError') { return res.status(400).json({ success: false, message: "Error de validación", errors: error.errors }); }
+            if (error.name === 'ValidationError') {
+                const messages = Object.values(error.errors).map(val => val.message);
+                const errorMessage = `Faltan datos requeridos: ${messages.join('. ')}`;
+                return res.status(400).json({ success: false, message: errorMessage, errors: error.errors });
+            }
             next(error);
         }
     },
+    
+    // El resto de las funciones no han cambiado, pero se incluyen para que el archivo esté completo.
     getAllOTs: async (req, res, next) => {
         try {
             const filters = {};
@@ -98,8 +107,6 @@ const ordenDeTrabajoController = {
             next(error);
         }
     },
-
-    // --- NUEVA FUNCIÓN PARA EXPORTAR A PDF ---
     exportOT: async (req, res, next) => {
         try {
             const ot = await OrdenDeTrabajo.findById(req.params.id)
@@ -113,45 +120,127 @@ const ordenDeTrabajoController = {
                 return res.status(404).json({ success: false, message: "Orden de Trabajo no encontrada." });
             }
 
-            const doc = new PDFDocument({ margin: 50 });
+            const doc = new PDFDocument({ size: 'A4', margin: 50 });
 
-            // Configuramos la respuesta para que el navegador sepa que es un PDF
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Disposition', `attachment; filename=OT-${ot._id}.pdf`);
 
-            // "Pipe" el contenido del PDF directamente a la respuesta
             doc.pipe(res);
 
-            // --- Contenido del PDF ---
-            doc.fontSize(20).text(`Orden de Trabajo: #${ot._id}`, { align: 'center' });
-            doc.moveDown();
+            // --- Encabezado ---
+            doc.fontSize(20).font('Helvetica-Bold').text('Orden de Trabajo', { align: 'center' });
+            doc.fontSize(12).font('Helvetica').text(`OT N°: ${ot._id}`, { align: 'center' });
+            doc.moveDown(2);
 
-            doc.fontSize(12).text(`Fecha: ${new Date(ot.fecha).toLocaleDateString()}`);
-            doc.text(`Campaña: ${ot.campaña}`);
-            doc.text(`Estado: ${ot.estado}`);
-            doc.moveDown();
+            // --- Función para dibujar secciones ---
+            const drawSection = (title, data) => {
+                doc.fontSize(14).font('Helvetica-Bold').text(title);
+                doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+                doc.moveDown(0.5);
+                data.forEach(([label, value]) => {
+                    doc.fontSize(10).font('Helvetica-Bold').text(label, { continued: true });
+                    doc.font('Helvetica').text(`: ${value || 'N/A'}`);
+                });
+                doc.moveDown();
+            };
 
-            doc.fontSize(14).text('Detalles Generales', { underline: true });
-            doc.fontSize(12).text(`Razón Social: ${ot.razonSocialId.nombre}`);
-            doc.text(`Campo: ${ot.campoId.nombre} (${ot.campoId.hectareas} ha)`);
-            doc.text(`Proveedor: ${ot.proveedorId.nombre}`);
-            doc.moveDown();
+            // --- Secciones de Información ---
+            drawSection('Detalles Generales', [
+                ['Fecha de Emisión', new Date(ot.fecha).toLocaleDateString()],
+                ['Campaña', ot.campana],
+                ['Estado', ot.estado],
+            ]);
 
-            doc.fontSize(14).text('Labor e Insumos', { underline: true });
-            doc.fontSize(12).text(`Labor: ${ot.laborId.descripcion}`);
-            doc.text(`Insumo: ${ot.insumoId.nombre}`);
-            doc.text(`Hectáreas a aplicar: ${ot.hectareas}`);
-            if (ot.dosis) doc.text(`Dosis: ${ot.dosis}`);
-            if (ot.cantidadInsumos) doc.text(`Cantidad de Insumos: ${ot.cantidadInsumos}`);
-            doc.moveDown();
+            drawSection('Información del Cliente', [
+                ['Razón Social', ot.razonSocialId.nombre],
+                ['Campo', `${ot.campoId.nombre} (${ot.campoId.hectareas} ha)`],
+            ]);
+
+            drawSection('Información del Proveedor', [
+                ['Proveedor Asignado', ot.proveedorId.nombre],
+                ['Correo', ot.proveedorId.correo],
+            ]);
             
+            drawSection('Detalles de la Labor', [
+                ['Labor a Realizar', ot.laborId.descripcion],
+                ['Insumo Principal', ot.insumoId.nombre],
+                ['Hectáreas a Aplicar', ot.hectareas],
+                ['Dosis', ot.dosis],
+                ['Cantidad de Insumos', ot.cantidadInsumos],
+                ['Orden de Carga', ot.ordenDeCarga],
+            ]);
+
             if (ot.observaciones) {
-                doc.fontSize(14).text('Observaciones', { underline: true });
-                doc.fontSize(12).text(ot.observaciones);
+                drawSection('Observaciones', [
+                    ['', ot.observaciones],
+                ]);
+            }
+
+            // --- Incrustar la Imagen ---
+            if (ot.imagen) {
+                try {
+                    // Descargamos la imagen como un buffer
+                    const imageResponse = await axios.get(ot.imagen, { responseType: 'arraybuffer' });
+                    const imageBuffer = Buffer.from(imageResponse.data, 'binary');
+
+                    doc.addPage();
+                    doc.fontSize(16).font('Helvetica-Bold').text('Imagen Adjunta', { align: 'center' });
+                    doc.moveDown();
+                    // Incrustamos la imagen en el PDF, ajustándola a la página
+                    doc.image(imageBuffer, {
+                        fit: [500, 600], // Ancho y alto máximos
+                        align: 'center',
+                        valign: 'center'
+                    });
+                } catch (imgError) {
+                    console.error("No se pudo cargar la imagen en el PDF:", imgError);
+                    // Si falla, simplemente no la añade pero el PDF se genera igual
+                }
             }
 
             // Finalizamos el PDF
             doc.end();
+
+        } catch (error) {
+            next(error);
+        }
+    },
+    getCostAnalysisByRazonSocial: async (req, res, next) => {
+        try {
+            const { razonSocialId } = req.params;
+            const ordenes = await OrdenDeTrabajo.find({
+                razonSocialId: razonSocialId,
+                estado: 'FINALIZADA'
+            }).populate('laborId').populate('insumoId');
+
+            if (!ordenes || ordenes.length === 0) {
+                return res.status(200).json({
+                    success: true,
+                    message: "No se encontraron órdenes finalizadas para esta Razón Social.",
+                    analysis: { totalLaborCost: 0, totalInsumoCost: 0, totalCost: 0, count: 0 }
+                });
+            }
+
+            let totalLaborCost = 0;
+            let totalInsumoCost = 0;
+
+            ordenes.forEach(ot => {
+                if (ot.laborId && ot.laborId.precioLabor) {
+                    totalLaborCost += ot.hectareas * ot.laborId.precioLabor;
+                }
+                if (ot.insumoId && ot.insumoId.precio && ot.cantidadInsumos) {
+                    totalInsumoCost += ot.cantidadInsumos * ot.insumoId.precio;
+                }
+            });
+
+            const analysis = {
+                totalLaborCost,
+                totalInsumoCost,
+                totalCost: totalLaborCost + totalInsumoCost,
+                count: ordenes.length
+            };
+
+            res.status(200).json({ success: true, analysis });
 
         } catch (error) {
             next(error);

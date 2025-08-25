@@ -8,26 +8,19 @@ import upload from '../middlewares/upload.js';
 const router = express.Router();
 
 // --- Rutas Generales ---
-router.route('/')
-    .post(authenticate, authorize('ADMIN'), upload, ordenDeTrabajoController.createOT);
+router.route('/').post(authenticate, authorize('ADMIN'), upload, ordenDeTrabajoController.createOT);
+router.route('/all').get(authenticate, authorize('ADMIN'), ordenDeTrabajoController.getAllOTs);
+router.route('/mis-ots').get(authenticate, authorize('PROVEEDOR'), ordenDeTrabajoController.getOTsByProveedor);
+router.route('/analysis/:razonSocialId').get(authenticate, authorize('ADMIN'), ordenDeTrabajoController.getCostAnalysisByRazonSocial);
 
-router.route('/all')
-    .get(authenticate, authorize('ADMIN'), ordenDeTrabajoController.getAllOTs);
+// --- Rutas de OT específica ---
+// CAMBIO CLAVE: Ahora tanto ADMIN como PROVEEDOR pueden exportar
+router.route('/:id/export').get(authenticate, authorize('ADMIN', 'PROVEEDOR'), ordenDeTrabajoController.exportOT);
 
-router.route('/mis-ots')
-    .get(authenticate, authorize('PROVEEDOR'), ordenDeTrabajoController.getOTsByProveedor);
-
-// --- NUEVA RUTA PARA EXPORTAR A PDF (Solo ADMIN) ---
-router.route('/:id/export')
-    .get(authenticate, authorize('ADMIN'), ordenDeTrabajoController.exportOT);
-
-router.route('/:id/finalizar')
-    .patch(authenticate, authorize('PROVEEDOR'), ordenDeTrabajoController.finalizarOT);
-
-// --- RUTAS para una OT específica (Solo ADMIN) ---
+router.route('/:id/finalizar').patch(authenticate, authorize('PROVEEDOR'), ordenDeTrabajoController.finalizarOT);
 router.route('/:id')
     .get(authenticate, authorize('ADMIN'), ordenDeTrabajoController.getOTById)
-    .put(authenticate, authorize('ADMIN'), upload, ordenDeTrabajoController.updateOT) // Actualizado para permitir cambiar imagen
+    .put(authenticate, authorize('ADMIN'), upload, ordenDeTrabajoController.updateOT)
     .delete(authenticate, authorize('ADMIN'), ordenDeTrabajoController.deleteOT);
 
 export default router;
