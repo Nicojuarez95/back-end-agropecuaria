@@ -1,24 +1,15 @@
-const authorize = (roles = []) => {
-    // Si se pasa un solo rol como string, lo convertimos a un array para simplificar
-    if (typeof roles === 'string') {
-        roles = [roles];
-    }
-
+export const authorize = (...roles) => {
+    // Retorna una función de middleware
     return (req, res, next) => {
-        if (!req.user || !req.user.role) {
-            return res.status(403).json({ message: 'Error de permisos. Rol no especificado.' });
+        // 'req.user' fue añadido por el middleware 'authenticate'
+        if (!req.user || !roles.includes(req.user.role)) {
+            // Si el usuario no existe o su rol no está en la lista permitida...
+            return res.status(403).json({ 
+                success: false, 
+                message: `Acceso denegado. Se requiere el rol: ${roles.join(' o ')}` 
+            });
         }
-
-        // Verificamos si el rol del usuario está en la lista de roles permitidos.
-        // Si la lista de roles está vacía, significa que cualquier usuario autenticado puede pasar.
-        if (roles.length && !roles.includes(req.user.role)) {
-            // El usuario está logueado, pero no tiene permiso para esta acción.
-            return res.status(403).json({ message: 'Acceso prohibido. Permisos insuficientes.' });
-        }
-
-        // El usuario tiene el rol adecuado, ¡continuamos!
+        // Si el rol es correcto, permite que la petición continúe
         next();
     };
 };
-
-export default authorize;

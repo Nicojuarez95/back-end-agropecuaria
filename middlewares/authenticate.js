@@ -1,24 +1,21 @@
+// ARCHIVO: /middlewares/authenticate.js
 import jwt from 'jsonwebtoken';
+import User from '../models/user.js';
 
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (token == null) {
-    console.log('No token provided');
-    return res.sendStatus(401); // No hay token
-  }
-
-  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
-    if (err) {
-      console.log('Error verifying token:', err.message);
-      return res.sendStatus(403); // Token inválido o expirado
+export const authenticate = async (req, res, next) => {
+    let token;
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+        try {
+            token = req.headers.authorization.split(' ')[1];
+            const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+            req.user = await User.findById(decoded.id).select('-password');
+            next();
+        } catch (error) {
+            console.error(error);
+            res.status(401).json({ success: false, message: 'No autorizado, token falló' });
+        }
     }
-
-    console.log('Token is valid:', user);
-    req.user = user;
-    next();
-  });
+    if (!token) {
+        res.status(401).json({ success: false, message: 'No autorizado, no hay token' });
+    }
 };
-
-export default authenticateToken;
